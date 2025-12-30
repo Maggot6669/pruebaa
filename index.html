@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Amor en las Nubes 💖 - Nivel Difícil (Dev Mode)</title>
+    <style>
+      :root {
+        --bg1: #ffe6f0;
+        --bg2: #ffb6c1;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        font-family: "Poppins", sans-serif;
+        background: linear-gradient(to top, var(--bg1), var(--bg2));
+        overflow: hidden;
+        color: #111;
+      }
+      canvas {
+        display: block;
+      }
+      #ui {
+        position: fixed;
+        left: 12px;
+        top: 12px;
+        z-index: 40;
+        background: rgba(255, 255, 255, 0.85);
+        padding: 8px 12px;
+        border-radius: 10px;
+        font-weight: 700;
+        color: #ff0066;
+      }
+      #msg {
+        position: fixed;
+        left: 50%;
+        top: 18%;
+        transform: translateX(-50%);
+        z-index: 40;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 12px 18px;
+        border-radius: 12px;
+        color: #ff0066;
+        font-weight: 700;
+        display: none;
+      }
+      #controls {
+        position: fixed;
+        right: 12px;
+        top: 12px;
+        z-index: 40;
+        background: rgba(255, 255, 255, 0.6);
+        padding: 6px 10px;
+        border-radius: 10px;
+        font-size: 13px;
+      }
+      #devPanel {
+        position: fixed;
+        left: 12px;
+        bottom: 12px;
+        z-index: 50;
+        background: rgba(0, 0, 0, 0.7);
+        color: #0f0;
+        padding: 8px 12px;
+        border-radius: 10px;
+        font-family: monospace;
+        font-size: 12px;
+        max-width: 350px;
+      }
+
+      /* NUEVO: mensaje estilo hoja de papel */
+      #sweetMsg {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 400px;
+        max-width: 90%;
+        background: #fff;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+        border-radius: 12px;
+        padding: 20px 24px;
+        color: #b2003a;
+        font-family: "Georgia", serif;
+        font-size: 16px;
+        z-index: 100;
+        display: none;
+      }
+      #sweetMsg .closeBtn {
+        position: absolute;
+        top: 8px;
+        right: 12px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 18px;
+        color: #b2003a;
+      }
+      #sweetMsg .downloadLink {
+        display: block;
+        margin-top: 16px;
+        text-align: center;
+      }
+      #sweetMsg .downloadLink a {
+        text-decoration: none;
+        background: #ff0066;
+        color: #fff;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: bold;
+      }
+
+      @media (max-width: 600px) {
+        #ui,
+        #controls {
+          font-size: 12px;
+          padding: 6px 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      💖 Corazones: <span id="score">0</span> / <span id="total">0</span>
+    </div>
+    <div id="controls">Controles: ← → mover · ↑ / W / Espacio saltar</div>
+    <div id="msg"></div>
+    <div id="sweetMsg"></div>
+    <div id="devPanel"></div>
+    <canvas id="game"></canvas>
+
+    <script>
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      const devPanel = document.getElementById("devPanel");
+      const sweetMsg = document.getElementById("sweetMsg");
+
+      function fit() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      fit();
+      window.addEventListener("resize", fit);
+
+      const playerImg = new Image();
+      playerImg.src = "player.png";
+      const enemyImg = new Image();
+      enemyImg.src = "villano.png";
+
+      const WORLD_WIDTH = 7000;
+      const GROUND_Y = () => canvas.height - 100;
+      const GRAVITY = 0.9;
+
+      const player = {
+        x: 60,
+        y: GROUND_Y() - 70,
+        w: 60,
+        h: 70,
+        dx: 0,
+        dy: 0,
+        speed: 8,
+        jump: 17,
+        onGround: false,
+      };
+      const ground = { x: -1000, y: GROUND_Y(), w: WORLD_WIDTH + 2000, h: 100 };
+
+      const platforms = [
+        ground,
+        { x: 400, y: GROUND_Y() - 150, w: 300, h: 18 },
+        { x: 850, y: GROUND_Y() - 220, w: 220, h: 18 },
+        { x: 1400, y: GROUND_Y() - 160, w: 180, h: 18 },
+        { x: 1700, y: GROUND_Y() - 240, w: 160, h: 18 },
+        { x: 2300, y: GROUND_Y() - 150, w: 300, h: 18 },
+        { x: 2800, y: GROUND_Y() - 260, w: 200, h: 18 },
+        {
+          x: 3350,
+          y: GROUND_Y() - 200,
+          w: 240,
+          h: 18,
+          move: true,
+          dir: 1,
+          minY: GROUND_Y() - 360,
+          maxY: GROUND_Y() - 150,
+        },
+        { x: 3800, y: GROUND_Y() - 150, w: 300, h: 18 },
+        { x: 4300, y: GROUND_Y() - 240, w: 220, h: 18 },
+        { x: 4800, y: GROUND_Y() - 320, w: 140, h: 18 },
+        { x: 5300, y: GROUND_Y() - 180, w: 300, h: 18 },
+        { x: 5850, y: GROUND_Y() - 250, w: 260, h: 18 },
+      ];
+
+      const traps = [
+        { x: 1000, y: ground.y, w: 125, h: ground.h },
+        { x: 2100, y: ground.y, w: 130, h: ground.h },
+        { x: 4700, y: ground.y, w: 1500, h: ground.h },
+      ];
+
+      const hearts = [
+        { x: 480, y: GROUND_Y() - 190, size: 18, collected: false },
+        { x: 880, y: GROUND_Y() - 250, size: 18, collected: false },
+        { x: 1450, y: GROUND_Y() - 190, size: 18, collected: false },
+        { x: 2350, y: GROUND_Y() - 200, size: 18, collected: false },
+        { x: 2870, y: GROUND_Y() - 290, size: 18, collected: false },
+        { x: 3400, y: GROUND_Y() - 420, size: 18, collected: false },
+        { x: 4850, y: GROUND_Y() - 360, size: 18, collected: false },
+        { x: 4400, y: GROUND_Y() - 270, size: 18, collected: false },
+        { x: 5430, y: GROUND_Y() - 210, size: 18, collected: false },
+        { x: 1800, y: GROUND_Y() - 280, size: 18, collected: false },
+        { x: 6050, y: GROUND_Y() - 280, size: 18, collected: false },
+      ];
+
+      const enemies = [
+        {
+          x: 1200,
+          y: GROUND_Y() - 70,
+          w: 50,
+          h: 50,
+          dx: 2,
+          startX: 1200,
+          range: 120,
+        },
+        {
+          x: 1750,
+          y: GROUND_Y() - 310,
+          w: 50,
+          h: 50,
+          dx: 1.5,
+          startX: 1750,
+          range: 100,
+        },
+        {
+          x: 3500,
+          y: GROUND_Y() - 70,
+          w: 50,
+          h: 50,
+          dx: 2.2,
+          startX: 3600,
+          range: 160,
+        },
+        {
+          x: 4300,
+          y: GROUND_Y() - 310,
+          w: 50,
+          h: 50,
+          dx: 1.8,
+          startX: 4300,
+          range: 120,
+        },
+      ];
+
+      let camX = 0;
+      const keys = {};
+      window.addEventListener("keydown", (e) => {
+        keys[e.key] = true;
+      });
+      window.addEventListener("keyup", (e) => {
+        keys[e.key] = false;
+      });
+
+      const scoreEl = document.getElementById("score");
+      const totalEl = document.getElementById("total");
+      const msgEl = document.getElementById("msg");
+      totalEl.textContent = hearts.length;
+
+      function rectsOverlapSimple(ax, ay, aw, ah, bx, by, bw, bh) {
+        return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+      }
+
+      function reiniciar(reason) {
+        player.x = 60;
+        player.y = GROUND_Y() - player.h;
+        player.dx = 0;
+        player.dy = 0;
+        player.onGround = false;
+        camX = 0;
+        msgEl.textContent = reason || "Reiniciando...";
+        msgEl.style.display = "block";
+        setTimeout(() => (msgEl.style.display = "none"), 700);
+      }
+
+      function drawHeart(x, y, size) {
+        ctx.save();
+        ctx.translate(x + size / 2, y + size / 2);
+        ctx.scale(size / 20, size / 20);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(0, -3, -6, -10, -10, -10);
+        ctx.bezierCurveTo(-18, -10, -18, -2, -18, 0);
+        ctx.bezierCurveTo(-18, 8, -10, 14, 0, 20);
+        ctx.bezierCurveTo(10, 14, 18, 8, 18, 0);
+        ctx.bezierCurveTo(18, -2, 18, -10, 10, -10);
+        ctx.bezierCurveTo(6, -10, 0, -3, 0, 0);
+        ctx.closePath();
+        ctx.fillStyle = "#ff3366";
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // NUEVO: mostrar mensaje estilo hoja de papel con botón X y descarga
+      function showSweetMessagePaper(messageText, fileUrl, fileName) {
+        sweetMsg.innerHTML = `
+          <span class="closeBtn">&times;</span>
+          <div class="messageContent">${messageText}</div>
+          <div class="downloadLink">
+            <a href="${fileUrl}" download="${fileName}">Descargar carta 📄</a>
+          </div>
+        `;
+        sweetMsg.style.display = "block";
+
+        const closeBtn = sweetMsg.querySelector(".closeBtn");
+        closeBtn.addEventListener("click", () => {
+          sweetMsg.style.display = "none";
+        });
+      }
+
+      function showPopupMessage(text, duration = 900) {
+        msgEl.textContent = text;
+        msgEl.style.display = "block";
+        setTimeout(() => (msgEl.style.display = "none"), duration);
+      }
+
+      let lastTime = 0;
+      let fps = 0;
+      function gameLoop(t) {
+        const dt = t - lastTime;
+        lastTime = t;
+        fps = Math.round(1000 / dt);
+        update(dt / 16);
+        render();
+        drawDev();
+        requestAnimationFrame(gameLoop);
+      }
+
+      function update(step) {
+        if (keys["ArrowLeft"] || keys["a"]) player.dx = -player.speed;
+        else if (keys["ArrowRight"] || keys["d"]) player.dx = player.speed;
+        else player.dx = 0;
+        if ((keys["ArrowUp"] || keys["w"] || keys[" "]) && player.onGround) {
+          player.dy = -player.jump;
+          player.onGround = false;
+        }
+        player.dy += GRAVITY;
+        player.x += player.dx;
+        player.y += player.dy;
+        if (player.x < 0) player.x = 0;
+        if (player.x + player.w > WORLD_WIDTH)
+          player.x = WORLD_WIDTH - player.w;
+
+        platforms.forEach((p) => {
+          if (p.move) {
+            p.y += p.dir * 1.8;
+            if (p.y < p.minY) {
+              p.y = p.minY;
+              p.dir *= -1;
+            }
+            if (p.y > p.maxY) {
+              p.y = p.maxY;
+              p.dir *= -1;
+            }
+          }
+        });
+
+        player.onGround = false;
+        for (let p of platforms) {
+          if (
+            player.x + player.w > p.x &&
+            player.x < p.x + p.w &&
+            player.y + player.h <= p.y + 12 &&
+            player.y + player.h + player.dy >= p.y
+          ) {
+            player.y = p.y - player.h;
+            player.dy = 0;
+            player.onGround = true;
+          }
+        }
+
+        for (let t of traps) {
+          if (player.x + player.w > t.x && player.x < t.x + t.w) {
+            if (player.y + player.h >= t.y - 8) {
+              reiniciar("Tocaste una trampa 💥");
+              return;
+            }
+          }
+        }
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          e.x += e.dx;
+          if (e.x < e.startX - e.range || e.x > e.startX + e.range) e.dx *= -1;
+          if (
+            rectsOverlapSimple(
+              player.x,
+              player.y,
+              player.w,
+              player.h,
+              e.x,
+              e.y,
+              e.w,
+              e.h
+            )
+          ) {
+            const landingFromAbove =
+              player.dy > 0 && player.y + player.h - e.y < 20;
+            if (landingFromAbove) {
+              enemies.splice(i, 1);
+              player.dy = -10;
+              msgBrief("+ enemigo eliminado");
+            } else {
+              reiniciar("Un enemigo te alcanzó 😢");
+              return;
+            }
+          }
+        }
+
+        for (let h of hearts) {
+          if (!h.collected) {
+            if (
+              rectsOverlapSimple(
+                player.x,
+                player.y,
+                player.w,
+                player.h,
+                h.x,
+                h.y,
+                h.size,
+                h.size
+              )
+            ) {
+              h.collected = true;
+              showPopupMessage("💖 +1");
+            }
+          }
+        }
+
+        camX = player.x - canvas.width / 2;
+        if (camX < 0) camX = 0;
+        if (camX > WORLD_WIDTH - canvas.width)
+          camX = WORLD_WIDTH - canvas.width;
+
+        const collectedCount = hearts.filter((h) => h.collected).length;
+        scoreEl.textContent = collectedCount;
+        totalEl.textContent = hearts.length;
+        if (collectedCount === hearts.length) {
+          // Aquí mostramos el mensaje estilo hoja de papel
+          showSweetMessagePaper(
+            "💖 ¡Recolectaste todos los corazones! Hola, mi amor. Espero que te haya gustado este jueguito que te hice. Llevo casi un mes desarrollando este juego, jajaja, pero sé que cada segundo que tardé en programarlo va a valer la pena, porque sé que te va a gustar y que cuando estés leyendo esto tendrás una sonrisa de oreja a oreja. Sé que vas a apreciar mi esfuerzo y que, cuando salgas de aquí, vas a ir directo a mi chat a decirme lo mucho que me amas, kjasjska. Te amo demasiado, amor. Aquí abajo te dejo otro detallito <3",
+            "1.png", // archivo dentro de la carpeta del proyecto
+            "Para mi esposa" // nombre al descargar
+          );
+        }
+      }
+
+      function render() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-camX, 0);
+
+        ctx.fillStyle = "#ffdfea";
+        ctx.fillRect(0, GROUND_Y(), WORLD_WIDTH, canvas.height - GROUND_Y());
+
+        platforms.forEach((p, i) => {
+          ctx.fillStyle = "#ff6fa3";
+          ctx.fillRect(p.x, p.y, p.w, p.h);
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "16px Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(i, p.x + p.w / 2, p.y + p.h / 2);
+        });
+
+        traps.forEach((t) => {
+          ctx.fillStyle = "#aa0011";
+          ctx.fillRect(t.x, t.y, t.w, 12);
+          ctx.fillStyle = "#660011";
+          for (let sx = t.x; sx < t.x + t.w; sx += 12) {
+            ctx.beginPath();
+            ctx.moveTo(sx, t.y);
+            ctx.lineTo(sx + 6, t.y - 12);
+            ctx.lineTo(sx + 12, t.y);
+            ctx.closePath();
+            ctx.fill();
+          }
+        });
+
+        for (let h of hearts) {
+          if (!h.collected) drawHeart(h.x, h.y, h.size);
+        }
+
+        for (let e of enemies) {
+          if (enemyImg.complete) ctx.drawImage(enemyImg, e.x, e.y, e.w, e.h);
+          else {
+            ctx.fillStyle = "#882222";
+            ctx.fillRect(e.x, e.y, e.w, e.h);
+          }
+        }
+
+        if (playerImg.complete)
+          ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
+        else {
+          ctx.fillStyle = "#ff1493";
+          ctx.fillRect(player.x, player.y, player.w, player.h);
+        }
+
+        ctx.restore();
+      }
+
+      function msgBrief(text) {
+        msgEl.textContent = text;
+        msgEl.style.display = "block";
+        setTimeout(() => {
+          if (msgEl.textContent === text) msgEl.style.display = "none";
+        }, 800);
+      }
+
+      function drawDev() {
+        // Opcional: aquí puedes mostrar info de depuración
+        devPanel.textContent = `FPS: ${fps} | Player X: ${player.x.toFixed(
+          0
+        )} Y: ${player.y.toFixed(0)}`;
+      }
+
+      enemies.forEach((e) => {
+        e.w = e.w || 50;
+        e.h = e.h || 50;
+        e.startX = e.startX || e.x;
+        e.range = e.range || 120;
+      });
+
+      platforms.forEach((p) => {
+        if (p.move && !p.minY) {
+          p.minY = p.minY || GROUND_Y() - 360;
+          p.maxY = p.maxY || GROUND_Y() - 150;
+        }
+      });
+
+      player.y = GROUND_Y() - player.h;
+      requestAnimationFrame(gameLoop);
+    </script>
+  </body>
+</html>
